@@ -163,7 +163,10 @@ export function buildReceipt(printer, data) {
   printer.alignLeft();
   printer.println(`주문번호: #${orderId}`);
   printer.println(`주문일시: ${orderDate}`);
-  printer.println(`배달예정: ${deliveryTime}`);
+  // 배달예정시간: 예약배달이면 항상 출력, 일반배달은 접수 후 재출력 시만 출력
+  if (deliveryHour != null && deliveryMinute != null) {
+    printer.println(`배달예정: ${deliveryTime}`);
+  }
   printer.println('--------------------------------');
 
   // ========== 고객 정보 ==========
