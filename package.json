@@ -1,0 +1,30 @@
+{
+  "name": "onuljang-printer",
+  "version": "1.0.0",
+  "description": "ESC/POS 프린터 브릿지 서버 - 배달 영수증 출력",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "bundle": "esbuild src/index.js --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs",
+    "package": "npm run bundle && pkg dist/bundle.cjs --targets node18-win-x64 --output dist/onuljang-printer.exe"
+  },
+  "keywords": [
+    "escpos",
+    "thermal-printer",
+    "receipt",
+    "delivery"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-thermal-printer": "^4.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "@yao-pkg/pkg": "^5.11.0"
+  }
+}
