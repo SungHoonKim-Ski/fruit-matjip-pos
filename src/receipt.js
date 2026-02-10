@@ -88,13 +88,13 @@ function formatPrice(amount, width = 15) {
  * - value: 우측 정렬
  * - 중간 공백으로 채움
  */
-function formatRow(label, value) {
+function formatRow(label, value, width = 32) {
   const koreanCount = (label.match(/[\uAC00-\uD7A3]/g) || []).length;
   const labelWidth = label.length + koreanCount;
   const valueKoreanCount = (value.match(/[\uAC00-\uD7A3]/g) || []).length;
   const valueWidth = value.length + valueKoreanCount;
 
-  const padding = Math.max(0, 32 - labelWidth - valueWidth);
+  const padding = Math.max(0, width - labelWidth - valueWidth);
   return label + ' '.repeat(padding) + value;
 }
 
@@ -152,11 +152,15 @@ export function buildReceipt(printer, data) {
   const totalAmount = totalProductAmount + deliveryFee;
 
   // ========== 헤더 ==========
+  // setTextQuadArea: 가로+세로 2배 (4배 면적) → 16자 폭 기준
+  // "과일맛집1995" = 한글4자(8폭) + 숫자4자(4폭) = 12폭 → 16자 폭 내 중앙 정렬
   printer.alignCenter();
   printer.drawLine();
+  printer.setTextQuadArea();
   printer.bold(true);
-  printer.println('과일맛집');
+  printer.println('과일맛집1995');
   printer.bold(false);
+  printer.setTextNormal();
   printer.drawLine();
 
   // ========== 주문 정보 ==========
@@ -165,7 +169,9 @@ export function buildReceipt(printer, data) {
   printer.println(`주문일시: ${orderDate}`);
   // 배달예정시간: 예약배달이면 항상 출력, 일반배달은 접수 후 재출력 시만 출력
   if (deliveryHour != null && deliveryMinute != null) {
+    printer.bold(true);
     printer.println(`배달예정: ${deliveryTime}`);
+    printer.bold(false);
   }
   printer.println('--------------------------------');
 
@@ -208,21 +214,30 @@ export function buildReceipt(printer, data) {
   printer.println('--------------------------------');
 
   // ========== 합계 ==========
+  printer.bold(true);
   printer.println(formatRow('상품합계:', formatAmount(totalProductAmount)));
   printer.println(formatRow(`배달비(${distanceKm}km):`, formatAmount(deliveryFee)));
-  printer.drawLine();
-
-  // 총합계 강조 (볼드)
-  printer.bold(true);
-  printer.println(formatRow('합  계:', formatAmount(totalAmount)));
   printer.bold(false);
   printer.drawLine();
 
+  // 총합계 강조 (4배 면적 + 볼드)
+  // setTextQuadArea 시 16자 폭 기준으로 정렬
+  printer.alignCenter();
+  printer.setTextQuadArea();
+  printer.bold(true);
+  printer.println(formatRow('합계:', formatAmount(totalAmount), 16));
+  printer.bold(false);
+  printer.setTextNormal();
+  printer.alignLeft();
+  printer.drawLine();
+
   // ========== 배달 주소 ==========
+  printer.bold(true);
   printer.println(address1);
   if (address2) {
     printer.println(address2);
   }
+  printer.bold(false);
   printer.drawLine();
 
   // 용지 여백 추가 (절단 시 내용 잘림 방지)
