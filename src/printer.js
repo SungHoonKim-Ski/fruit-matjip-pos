@@ -31,7 +31,8 @@ function findPrinterPort() {
     for (const line of lines) {
       if (line.toUpperCase().includes('SEWOO')) {
         const columns = line.split(',');
-        const portName = columns[columns.length - 1].trim();
+        // wmic 출력에서 포트 이름 정리: 공백, \r, 후행 콜론 제거 (예: "LPT 1:" → "LPT1")
+        const portName = columns[columns.length - 1].replace(/[\s\r:]/g, '');
         if (portName) {
           return portName;
         }
@@ -85,15 +86,21 @@ export function initPrinter() {
  *
  * @returns {Promise<boolean>} 연결 성공 여부
  *
- * isPrinterConnected()는 실제 USB 디바이스 통신을 시도하여 연결 확인
- * - true: USB 프린터 감지됨, 데이터 전송 가능
- * - false: 디바이스 없음, 드라이버 오류, 전원 꺼짐 등
+ * Windows: fs.existsSync가 디바이스 경로(\\.\LPT1)를 인식하지 못하므로
+ *          wmic으로 프린터 오프라인 여부를 확인
  */
 export async function checkPrinterStatus() {
   try {
-    const printer = initPrinter();
-    const isConnected = await printer.isPrinterConnected();
-    return isConnected;
+    initPrinter();
+    const result = execSync(
+      'wmic printer where "Name like \'%%SEWOO%%\'" get WorkOffline /value',
+      { encoding: 'utf-8', timeout: 5000 }
+    );
+    const match = result.match(/WorkOffline=(\w+)/i);
+    if (match) {
+      return match[1].toUpperCase() === 'FALSE'; // FALSE = 온라인
+    }
+    return findPrinterPort() !== null;
   } catch (error) {
     console.error('[Printer] 연결 확인 실패:', error.message);
     return false;
