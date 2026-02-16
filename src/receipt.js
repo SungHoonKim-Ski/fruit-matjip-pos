@@ -200,19 +200,23 @@ export function buildReceipt(printer, data) {
   printer.println('--------------------------------');
 
   // ========== 고객 정보 ==========
-  printer.bold(true);
   printer.println('[고객정보]');
-  printer.bold(false);
+  printer.setTextDoubleHeight();
+  printer.bold(true);
   printer.println(`${buyerName} / ${phone}`);
+  printer.bold(false);
+  printer.setTextNormal();
   printer.newLine();
   // ========== 배달 주소 ==========
-  printer.bold(true);
   printer.println('[배달주소]');
+  printer.setTextDoubleHeight();
+  printer.bold(true);
   printer.println(address1);
   if (address2) {
     printer.println(address2);
   }
   printer.bold(false);
+  printer.setTextNormal();
   printer.println('--------------------------------');
 
   // ========== 상품 목록 ==========
