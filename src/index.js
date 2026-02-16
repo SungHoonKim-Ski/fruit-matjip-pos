@@ -40,6 +40,20 @@ app.use(cors({
 }));
 
 /**
+ * Chrome Private Network Access (PNA) 대응
+ *
+ * HTTPS 사이트(fruit-matjip.store)에서 로컬 서버(127.0.0.1)로 요청 시
+ * Chrome이 preflight에 Access-Control-Request-Private-Network 헤더를 추가.
+ * 서버가 Access-Control-Allow-Private-Network: true로 응답해야 요청이 허용됨.
+ */
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
+
+/**
  * JSON 바디 파서
  *
  * limit: '10mb' - 대량 주문 시 items 배열이 클 수 있으므로 여유 있게 설정
