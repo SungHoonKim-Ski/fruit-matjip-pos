@@ -171,6 +171,7 @@ export function buildReceipt(printer, data) {
   printer.println('과일맛집1995');
   printer.bold(false);
   printer.setTextNormal();
+  printer.alignLeft();
   printer.drawLine();
 
   // ========== 예약배달 표시 ==========
