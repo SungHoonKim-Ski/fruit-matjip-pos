@@ -122,6 +122,7 @@ function formatRow(label, value, width = 32) {
 export function buildReceipt(printer, data) {
   const {
     orderId,
+    displayCode,
     paidAt,
     deliveryHour,
     deliveryMinute,
@@ -132,8 +133,12 @@ export function buildReceipt(printer, data) {
     deliveryFee,
     distanceKm,
     address1,
-    address2
+    address2,
+    scheduledDeliveryHour,
+    scheduledDeliveryMinute
   } = data;
+
+  const isScheduled = scheduledDeliveryHour != null;
 
   // 날짜 포맷: "2026-02-11 14:30"
   const orderDate = new Date(paidAt).toLocaleString('ko-KR', {
@@ -163,26 +168,45 @@ export function buildReceipt(printer, data) {
   printer.setTextNormal();
   printer.drawLine();
 
+  // ========== 예약배달 표시 ==========
+  if (isScheduled) {
+    printer.alignCenter();
+    printer.bold(true);
+    printer.println('** 예약배달 **');
+    printer.bold(false);
+    printer.alignLeft();
+  }
+
   // ========== 주문 정보 ==========
-  printer.alignLeft();
-  printer.println(`주문번호: #${orderId}`);
+  const orderLabel = displayCode || `#${orderId}`;
+  printer.println(`주문번호: ${orderLabel}`);
   printer.println(`주문일시: ${orderDate}`);
-  // 배달예정시간: 예약배달이면 항상 출력, 일반배달은 접수 후 재출력 시만 출력
-  if (deliveryHour != null && deliveryMinute != null) {
+  if (isScheduled) {
+    const scheduledTime = `${String(scheduledDeliveryHour).padStart(2, '0')}:${String(scheduledDeliveryMinute ?? 0).padStart(2, '0')}`;
+    printer.bold(true);
+    printer.println(`도착예정: ${scheduledTime}`);
+    printer.bold(false);
+  } else if (deliveryHour != null && deliveryMinute != null) {
     printer.bold(true);
     printer.println(`배달예정: ${deliveryTime}`);
     printer.bold(false);
   }
   printer.println('--------------------------------');
 
-  // ========== 고객 정보 ==========
+  // ========== 고객 정보 + 배달 주소 ==========
+  printer.println('고객정보');
   printer.println(`${buyerName} / ${phone}`);
+  printer.bold(true);
+  printer.println(address1);
+  if (address2) {
+    printer.println(address2);
+  }
+  printer.bold(false);
   printer.println('--------------------------------');
 
   // ========== 상품 목록 ==========
-  // 헤더는 생략 (공간 절약)
-  // 포맷: "상품명  수량  단가  금액"
-  // 예: "사과          2  5,000  10,000"
+  // 헤더: 상품명(14) + 수량(3) + 가격(7) + 총합(8) = 32자
+  printer.println('상품명        수량   가격    총합');
   items.forEach(item => {
     const { productName, quantity, amount } = item;
     const unitPrice = amount / quantity;
@@ -229,15 +253,6 @@ export function buildReceipt(printer, data) {
   printer.bold(false);
   printer.setTextNormal();
   printer.alignLeft();
-  printer.drawLine();
-
-  // ========== 배달 주소 ==========
-  printer.bold(true);
-  printer.println(address1);
-  if (address2) {
-    printer.println(address2);
-  }
-  printer.bold(false);
   printer.drawLine();
 
   // 용지 여백 추가 (절단 시 내용 잘림 방지)
