@@ -156,6 +156,11 @@ export function buildReceipt(printer, data) {
   // 총 결제금액 = 상품합계 + 배달비
   const totalAmount = totalProductAmount + deliveryFee;
 
+  // 예약배달 시각 (헤더 + 주문정보에서 공용)
+  const scheduledTime = isScheduled
+    ? `${String(scheduledDeliveryHour).padStart(2, '0')}:${String(scheduledDeliveryMinute ?? 0).padStart(2, '0')}`
+    : null;
+
   // ========== 헤더 ==========
   // setTextQuadArea: 가로+세로 2배 (4배 면적) → 16자 폭 기준
   // "과일맛집1995" = 한글4자(8폭) + 숫자4자(4폭) = 12폭 → 16자 폭 내 중앙 정렬
@@ -171,9 +176,11 @@ export function buildReceipt(printer, data) {
   // ========== 예약배달 표시 ==========
   if (isScheduled) {
     printer.alignCenter();
+    printer.setTextDoubleHeight();
     printer.bold(true);
-    printer.println('** 예약배달 **');
+    printer.println(`** ${scheduledTime} 예약배달 **`);
     printer.bold(false);
+    printer.setTextNormal();
     printer.alignLeft();
   }
 
@@ -182,7 +189,6 @@ export function buildReceipt(printer, data) {
   printer.println(`주문번호: ${orderLabel}`);
   printer.println(`주문일시: ${orderDate}`);
   if (isScheduled) {
-    const scheduledTime = `${String(scheduledDeliveryHour).padStart(2, '0')}:${String(scheduledDeliveryMinute ?? 0).padStart(2, '0')}`;
     printer.bold(true);
     printer.println(`도착예정: ${scheduledTime}`);
     printer.bold(false);
@@ -210,8 +216,8 @@ export function buildReceipt(printer, data) {
   printer.println('--------------------------------');
 
   // ========== 상품 목록 ==========
-  // 헤더: 상품명(14) + 수량(3) + 가격(7) + 총합(8) = 32자
-  printer.println('상품명        수량   가격    총합');
+  // 헤더 우측정렬 기준: 상품명(~14) 수량(~17) 가격(~24) 총합(~32)
+  printer.println('상품명       수량   가격    총합');
   items.forEach(item => {
     const { productName, quantity, amount } = item;
     const unitPrice = amount / quantity;
