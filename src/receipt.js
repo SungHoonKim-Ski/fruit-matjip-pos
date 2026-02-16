@@ -140,15 +140,9 @@ export function buildReceipt(printer, data) {
 
   const isScheduled = scheduledDeliveryHour != null;
 
-  // 날짜 포맷: "2026-02-11 14:30"
-  const orderDate = new Date(paidAt).toLocaleString('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).replace(/\. /g, '-').replace('.', '');
+  // 날짜 포맷: "2026/02/12/02/08/03"
+  const d = new Date(paidAt);
+  const orderDate = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getHours()).padStart(2, '0')}/${String(d.getMinutes()).padStart(2, '0')}/${String(d.getSeconds()).padStart(2, '0')}`;
 
   // 배달예정 시각: "15:10"
   const deliveryTime = `${String(deliveryHour).padStart(2, '0')}:${String(deliveryMinute).padStart(2, '0')}`;
