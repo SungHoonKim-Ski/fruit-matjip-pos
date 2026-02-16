@@ -95,6 +95,9 @@ app.post('/print', async (req, res) => {
   try {
     const data = req.body;
 
+    // 예약배달 디버그 로그
+    console.log('[DEBUG] scheduledDeliveryHour:', data.scheduledDeliveryHour, '| scheduledDeliveryMinute:', data.scheduledDeliveryMinute);
+
     // 필수 필드 검증
     const requiredFields = [
       'orderId', 'paidAt', 'deliveryHour', 'deliveryMinute',
