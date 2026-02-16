@@ -21,9 +21,16 @@ let printerInstance = null;
  *
  * @returns {string|null} 포트 이름 (예: 'LPT1') 또는 탐색 실패 시 null
  */
-function findPrinterPort() {
+/**
+ * wmic CSV 출력에서 SEWOO 프린터 행을 찾아 지정 컬럼 값을 반환
+ *
+ * @param {string[]} fields - wmic get 필드 목록 (예: ['Name', 'PortName'])
+ * @param {number} targetIndex - 반환할 필드의 CSV 컬럼 인덱스 (Node 컬럼 제외하지 않은 원본 인덱스)
+ * @returns {string|null}
+ */
+function querySewooPrinter(fields, targetIndex) {
   try {
-    const result = execSync('wmic printer get Name,PortName /format:csv', {
+    const result = execSync(`wmic printer get ${fields.join(',')} /format:csv`, {
       encoding: 'utf-8',
       timeout: 5000
     });
@@ -31,18 +38,19 @@ function findPrinterPort() {
     for (const line of lines) {
       if (line.toUpperCase().includes('SEWOO')) {
         const columns = line.split(',');
-        // wmic 출력에서 포트 이름 정리: 공백, \r, 후행 콜론 제거 (예: "LPT 1:" → "LPT1")
-        const portName = columns[columns.length - 1].replace(/[\s\r:]/g, '');
-        if (portName) {
-          return portName;
-        }
+        // 영숫자만 추출 (콜론, \r, 공백 등 모두 제거)
+        return columns[targetIndex].replace(/[^A-Za-z0-9]/g, '') || null;
       }
     }
     return null;
   } catch (error) {
-    console.error('[Printer] 포트 자동 탐색 실패:', error.message);
     return null;
   }
+}
+
+function findPrinterPort() {
+  // CSV 컬럼: Node(0), Name(1), PortName(2)
+  return querySewooPrinter(['Name', 'PortName'], 2);
 }
 
 /**
@@ -92,13 +100,10 @@ export function initPrinter() {
 export async function checkPrinterStatus() {
   try {
     initPrinter();
-    const result = execSync(
-      'wmic printer where "Name like \'%%SEWOO%%\'" get WorkOffline /value',
-      { encoding: 'utf-8', timeout: 5000 }
-    );
-    const match = result.match(/WorkOffline=(\w+)/i);
-    if (match) {
-      return match[1].toUpperCase() === 'FALSE'; // FALSE = 온라인
+    // CSV 컬럼: Node(0), Name(1), WorkOffline(2)
+    const offline = querySewooPrinter(['Name', 'WorkOffline'], 2);
+    if (offline) {
+      return offline.toUpperCase() === 'FALSE'; // FALSE = 온라인
     }
     return findPrinterPort() !== null;
   } catch (error) {
