@@ -193,10 +193,15 @@ export function buildReceipt(printer, data) {
   }
   printer.println('--------------------------------');
 
-  // ========== 고객 정보 + 배달 주소 ==========
-  printer.println('고객정보');
-  printer.println(`${buyerName} / ${phone}`);
+  // ========== 고객 정보 ==========
   printer.bold(true);
+  printer.println('[고객정보]');
+  printer.bold(false);
+  printer.println(`${buyerName} / ${phone}`);
+  printer.newLine();
+  // ========== 배달 주소 ==========
+  printer.bold(true);
+  printer.println('[배달주소]');
   printer.println(address1);
   if (address2) {
     printer.println(address2);
@@ -211,12 +216,12 @@ export function buildReceipt(printer, data) {
     const { productName, quantity, amount } = item;
     const unitPrice = amount / quantity;
 
-    // 상품명: 최대 10자 (한글 5자), 넘으면 자름
-    const nameMaxWidth = 10;
+    // 상품명: 최대 14폭 (한글 7자), 넘으면 자름
+    const nameMaxWidth = 14;
     const nameKoreanCount = (productName.match(/[\uAC00-\uD7A3]/g) || []).length;
     const nameActualWidth = productName.length + nameKoreanCount;
     const truncatedName = nameActualWidth > nameMaxWidth
-      ? productName.substring(0, 5) // 한글 5자 기준 자름
+      ? productName.substring(0, 7) // 한글 7자 기준 자름
       : productName;
 
     // 상품명 좌측 정렬 (14자 폭)
