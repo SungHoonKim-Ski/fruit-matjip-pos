@@ -187,7 +187,12 @@ export function buildReceipt(printer, data) {
 
   // ========== 주문 정보 ==========
   const orderLabel = displayCode || `#${orderId}`;
-  printer.println(`주문번호: ${orderLabel}`);
+  printer.println('[주문정보]');
+  printer.setTextDoubleHeight();
+  printer.bold(true);
+  printer.println(orderLabel);
+  printer.bold(false);
+  printer.setTextNormal();
   printer.println(`주문일시: ${orderDate}`);
   if (isScheduled) {
     printer.bold(true);
