@@ -1,4 +1,5 @@
 import { ThermalPrinter, PrinterTypes } from 'node-thermal-printer';
+import { execSync } from 'child_process';
 
 /**
  * ESC/POS 프린터 연결 및 출력 래퍼
@@ -6,43 +7,73 @@ import { ThermalPrinter, PrinterTypes } from 'node-thermal-printer';
  * 기술적 결정:
  * 1. USB 인터페이스 사용 (PrinterTypes.EPSON) - 대부분의 58mm 영수증 프린터가 EPSON ESC/POS 호환
  * 2. 싱글톤 패턴으로 프린터 인스턴스 관리 - 동시 출력 충돌 방지
- * 3. 명시적 에러 핸들링 - USB 디바이스 접근 실패, 용지 부족 등 디버깅 용이
+ * 3. wmic으로 SEWOO 프린터 포트 자동 탐색 - 포트 변경 시에도 재빌드 불필요
  */
 
 let printerInstance = null;
+
+/**
+ * Windows에서 SEWOO 프린터의 포트를 자동 탐색
+ *
+ * wmic printer get Name,PortName /format:csv 출력 예시:
+ *   Node,Name,PortName
+ *   DESKTOP-XXX,SEWOO SLK-TS 100,LPT1
+ *
+ * @returns {string|null} 포트 이름 (예: 'LPT1') 또는 탐색 실패 시 null
+ */
+function findPrinterPort() {
+  try {
+    const result = execSync('wmic printer get Name,PortName /format:csv', {
+      encoding: 'utf-8',
+      timeout: 5000
+    });
+    const lines = result.trim().split('\n');
+    for (const line of lines) {
+      if (line.toUpperCase().includes('SEWOO')) {
+        const columns = line.split(',');
+        const portName = columns[columns.length - 1].trim();
+        if (portName) {
+          return portName;
+        }
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('[Printer] 포트 자동 탐색 실패:', error.message);
+    return null;
+  }
+}
 
 /**
  * 프린터 초기화 및 연결
  *
  * @returns {ThermalPrinter} 프린터 인스턴스
  *
- * USB 디바이스 경로 자동 탐색 순서:
- * 1. /dev/usb/lp0 (Linux 표준)
- * 2. /dev/usb/lp1 (Linux 2번째 USB 프린터)
- * 3. 빈 문자열 (Windows - node-thermal-printer가 자동 탐색)
- *
- * characterSet: 'PC437_USA' - 영문 + 숫자 + 기본 ASCII 문자 (한글은 이미지로 처리해야 함)
- * removeSpecialCharacters: false - 특수문자 보존 (영수증 레이아웃용 - 등호, 대시 등)
- * lineCharacter: "=" - 구분선 문자 (32자 반복으로 전폭 구분선 생성)
+ * Windows 포트 탐색 순서:
+ * 1. wmic으로 SEWOO 프린터 포트 자동 탐색
+ * 2. 탐색 실패 시 LPT1 폴백
  */
 export function initPrinter() {
   if (printerInstance) {
     return printerInstance;
   }
 
-  // 운영체제별 USB 경로 분기
-  const interfacePath = process.platform === 'win32'
-    ? '' // Windows는 자동 탐색
-    : '/dev/usb/lp0'; // Linux/macOS는 첫 번째 USB 프린터
+  const port = findPrinterPort();
+  if (port) {
+    console.log(`[Printer] SEWOO 프린터 발견 → 포트: ${port}`);
+  } else {
+    console.warn('[Printer] SEWOO 프린터를 찾을 수 없습니다. LPT1으로 시도합니다.');
+  }
+  const interfacePath = `\\\\.\\${port || 'LPT1'}`;
 
   printerInstance = new ThermalPrinter({
-    type: PrinterTypes.EPSON, // EPSON ESC/POS 명령어 세트 사용
+    type: PrinterTypes.EPSON,
     interface: interfacePath,
     characterSet: 'PC437_USA',
     removeSpecialCharacters: false,
     lineCharacter: "=",
     options: {
-      timeout: 5000 // USB 통신 타임아웃 5초
+      timeout: 5000
     }
   });
 
