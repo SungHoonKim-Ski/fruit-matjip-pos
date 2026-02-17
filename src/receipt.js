@@ -155,20 +155,7 @@ export function buildReceipt(printer, data) {
     ? `${String(scheduledDeliveryHour).padStart(2, '0')}:${String(scheduledDeliveryMinute ?? 0).padStart(2, '0')}`
     : null;
 
-  // ========== 헤더 ==========
-  // setTextQuadArea: 가로+세로 2배 (4배 면적) → 16자 폭 기준
-  // "과일맛집1995" = 한글4자(8폭) + 숫자4자(4폭) = 12폭 → 16자 폭 내 중앙 정렬
-  printer.alignCenter();
-  printer.drawLine();
-  printer.setTextQuadArea();
-  printer.bold(true);
-  printer.println('과일맛집1995');
-  printer.bold(false);
-  printer.setTextNormal();
-  printer.alignLeft();
-  printer.drawLine();
-
-  // ========== 예약배달 표시 ==========
+  // ========== 예약배달 표시 (최상단) ==========
   if (isScheduled) {
     printer.alignCenter();
     printer.setTextDoubleHeight();
@@ -179,14 +166,19 @@ export function buildReceipt(printer, data) {
     printer.alignLeft();
   }
 
-  // ========== 주문 정보 ==========
+  // ========== 헤더 (주문번호) ==========
   const orderLabel = displayCode ? `D-${displayCode}` : `#${orderId}`;
-  printer.println('[주문정보]');
-  printer.setTextDoubleHeight();
+  printer.alignCenter();
+  printer.drawLine();
+  printer.setTextQuadArea();
   printer.bold(true);
-  printer.println(`주문번호: ${orderLabel}`);
+  printer.println(orderLabel);
   printer.bold(false);
   printer.setTextNormal();
+  printer.alignLeft();
+  printer.drawLine();
+
+  // ========== 주문 정보 ==========
   printer.println(`주문일시: ${orderDate}`);
   if (isScheduled) {
     printer.bold(true);
