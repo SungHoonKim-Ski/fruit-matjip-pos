@@ -124,8 +124,6 @@ export function buildReceipt(printer, data) {
     orderId,
     displayCode,
     paidAt,
-    deliveryHour,
-    deliveryMinute,
     buyerName,
     phone,
     items,
@@ -143,9 +141,6 @@ export function buildReceipt(printer, data) {
   // 날짜 포맷: "2026-02-12 02:08:03"
   const d = new Date(paidAt);
   const orderDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-
-  // 배달예정 시각: "15:10"
-  const deliveryTime = `${String(deliveryHour).padStart(2, '0')}:${String(deliveryMinute).padStart(2, '0')}`;
 
   // 총 결제금액 = 상품합계 + 배달비
   const totalAmount = totalProductAmount + deliveryFee;
@@ -184,10 +179,6 @@ export function buildReceipt(printer, data) {
     printer.bold(true);
     printer.println(`도착예정: ${scheduledTime}`);
     printer.bold(false);
-  } else if (deliveryHour != null && deliveryMinute != null) {
-    printer.bold(true);
-    printer.println(`배달예정: ${deliveryTime}`);
-    printer.bold(false);
   }
   printer.println('--------------------------------');
 
@@ -212,34 +203,44 @@ export function buildReceipt(printer, data) {
   printer.println('--------------------------------');
 
   // ========== 상품 목록 ==========
-  // 헤더 우측정렬 기준: 상품명(~14) 수량(~17) 가격(~24) 총합(~32)
+  // 1줄: 상품명(14폭) + 수량(3) + 가격(7) + 총합(8) = 32
+  // 상품명이 14폭 초과 시 나머지를 다음 줄에 이어서 출력
   printer.println('상품명       수량   가격    총합');
   items.forEach(item => {
     const { productName, quantity, amount } = item;
     const unitPrice = amount / quantity;
 
-    // 상품명: 최대 14폭 (한글 7자), 넘으면 자름
+    // 상품명을 14폭 단위로 분할
     const nameMaxWidth = 14;
-    const nameKoreanCount = (productName.match(/[\uAC00-\uD7A3]/g) || []).length;
-    const nameActualWidth = productName.length + nameKoreanCount;
-    const truncatedName = nameActualWidth > nameMaxWidth
-      ? productName.substring(0, 7) // 한글 7자 기준 자름
-      : productName;
+    const nameLines = [];
+    let remaining = productName;
+    while (remaining.length > 0) {
+      let cutLen = 0;
+      let cutWidth = 0;
+      for (let i = 0; i < remaining.length; i++) {
+        const charWidth = /[\uAC00-\uD7A3]/.test(remaining[i]) ? 2 : 1;
+        if (cutWidth + charWidth > nameMaxWidth) break;
+        cutWidth += charWidth;
+        cutLen = i + 1;
+      }
+      if (cutLen === 0) cutLen = 1; // 최소 1글자
+      nameLines.push({ text: remaining.substring(0, cutLen), width: cutWidth });
+      remaining = remaining.substring(cutLen);
+    }
 
-    // 상품명 좌측 정렬 (14자 폭)
-    const namePadding = 14 - (truncatedName.length + (truncatedName.match(/[\uAC00-\uD7A3]/g) || []).length);
-    const nameField = truncatedName + ' '.repeat(Math.max(0, namePadding));
-
-    // 수량 우측 정렬 (3자 폭)
+    // 1줄: 상품명 + 수량 + 가격 + 총합
+    const firstLine = nameLines[0];
+    const namePadding = Math.max(0, nameMaxWidth - firstLine.width);
+    const nameField = firstLine.text + ' '.repeat(namePadding);
     const qtyField = String(quantity).padStart(3, ' ');
-
-    // 단가 우측 정렬 (7자 폭)
     const unitField = String(unitPrice.toLocaleString('ko-KR')).padStart(7, ' ');
-
-    // 금액 우측 정렬 (8자 폭)
     const amtField = String(amount.toLocaleString('ko-KR')).padStart(8, ' ');
-
     printer.println(`${nameField}${qtyField}${unitField}${amtField}`);
+
+    // 2줄~: 나머지 상품명
+    for (let i = 1; i < nameLines.length; i++) {
+      printer.println(nameLines[i].text);
+    }
   });
 
   printer.println('--------------------------------');
