@@ -92,28 +92,33 @@ function ensureRawPrintScript() {
 }
 
 /**
- * wmic CSV에서 SEWOO 프린터 정보 조회
+ * PowerShell Get-CimInstance로 SEWOO 프린터 정보 조회
  *
- * @param {string[]} fields - wmic get 필드 목록
- * @param {number} targetIndex - 반환할 컬럼 인덱스
- * @param {boolean} [cleanAlphaNum=true] - true면 영숫자만 추출, false면 trim만
- * @returns {string|null}
+ * Windows 11에서 wmic이 제거되어 PowerShell로 대체
+ * Get-CimInstance Win32_Printer는 PS 3.0+ (Windows 10/11 기본 탑재)
+ *
+ * @returns {{ name: string, port: string, workOffline: boolean } | null}
  */
-function querySewooPrinter(fields, targetIndex, cleanAlphaNum = true) {
+let sewooCache = null;
+
+function findSewooPrinter() {
+  if (sewooCache) return sewooCache;
   try {
-    const result = execSync(`wmic printer get ${fields.join(',')} /format:csv`, {
-      encoding: 'utf-8',
-      timeout: 5000
-    });
-    const lines = result.trim().split('\n');
-    for (const line of lines) {
-      if (line.toUpperCase().includes('SEWOO')) {
-        const columns = line.split(',');
-        if (cleanAlphaNum) {
-          return columns[targetIndex].replace(/[^A-Za-z0-9]/g, '') || null;
-        }
-        return columns[targetIndex].replace(/\r/g, '').trim() || null;
-      }
+    const result = execSync(
+      'powershell -NoProfile -Command "Get-CimInstance Win32_Printer | Where-Object { $_.Name -like \'*SEWOO*\' } | Select-Object Name,PortName,WorkOffline | ConvertTo-Json"',
+      { encoding: 'utf-8', timeout: 10000 }
+    );
+    const trimmed = result.trim();
+    if (!trimmed) return null;
+    const data = JSON.parse(trimmed);
+    const printer = Array.isArray(data) ? data[0] : data;
+    if (printer && printer.Name) {
+      sewooCache = {
+        name: printer.Name,
+        port: (printer.PortName || '').replace(/[^A-Za-z0-9]/g, ''),
+        workOffline: printer.WorkOffline
+      };
+      return sewooCache;
     }
     return null;
   } catch (error) {
@@ -122,7 +127,8 @@ function querySewooPrinter(fields, targetIndex, cleanAlphaNum = true) {
 }
 
 function findPrinterPort() {
-  return querySewooPrinter(['Name', 'PortName'], 2);
+  const info = findSewooPrinter();
+  return info ? info.port : null;
 }
 
 /**
@@ -130,8 +136,8 @@ function findPrinterPort() {
  * @returns {string|null} 예: 'SEWOO SLK-TS 100'
  */
 function findPrinterName() {
-  // CSV 컬럼: Node(0), Name(1) — cleanAlphaNum=false로 원본 이름 보존
-  return querySewooPrinter(['Name'], 1, false);
+  const info = findSewooPrinter();
+  return info ? info.name : null;
 }
 
 /**
@@ -182,12 +188,13 @@ export function initPrinter() {
 export async function checkPrinterStatus() {
   try {
     initPrinter();
-    // CSV 컬럼: Node(0), Name(1), WorkOffline(2)
-    const offline = querySewooPrinter(['Name', 'WorkOffline'], 2);
-    if (offline) {
-      return offline.toUpperCase() === 'FALSE'; // FALSE = 온라인
+    // 캐시 초기화하여 최신 상태 조회
+    sewooCache = null;
+    const info = findSewooPrinter();
+    if (info) {
+      return !info.workOffline; // false = 온라인
     }
-    return findPrinterPort() !== null;
+    return false;
   } catch (error) {
     console.error('[Printer] 연결 확인 실패:', error.message);
     return false;
