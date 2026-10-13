@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { initPrinter, checkPrinterStatus, printReceipt, closePrinter } from './printer.js';
 import { buildReceipt } from './receipt.js';
+import { buildLabels } from './label.js';
 
 /**
  * ESC/POS 프린터 브릿지 서버
@@ -153,6 +154,66 @@ app.post('/print', async (req, res) => {
 });
 
 /**
+ * POST /print-labels - 픽업 이름표 출력
+ *
+ * Request Body:
+ * {
+ *   labels: [{ name, productName, seq, customerTotal, contact }]
+ * }
+ *
+ * 이름표 하나를 찍고 용지를 자르기를 labels 순서대로 반복한다.
+ *
+ * Response:
+ * 200 - { message: "이름표 출력 완료", count }
+ * 400 - { error: "이름표 목록(labels)이 비어 있습니다" | "이름표 형식 오류: ..." }
+ * 500 - { error: "프린터 연결 실패" | "출력 실패: ..." }
+ */
+app.post('/print-labels', async (req, res) => {
+  try {
+    const { labels } = req.body;
+
+    if (!Array.isArray(labels) || labels.length === 0) {
+      return res.status(400).json({
+        error: '이름표 목록(labels)이 비어 있습니다'
+      });
+    }
+
+    const invalidIndex = labels.findIndex((label) =>
+      !label || typeof label.name !== 'string' || typeof label.seq !== 'string' || typeof label.customerTotal !== 'number'
+    );
+    if (invalidIndex !== -1) {
+      return res.status(400).json({
+        error: `이름표 형식 오류: ${invalidIndex + 1}번째`
+      });
+    }
+
+    const printer = initPrinter();
+
+    const isConnected = await checkPrinterStatus();
+    if (!isConnected) {
+      return res.status(500).json({
+        error: '프린터 연결 실패 - USB 케이블 및 전원을 확인하세요'
+      });
+    }
+
+    buildLabels(printer, labels);
+
+    await printReceipt(printer);
+
+    res.json({
+      message: '이름표 출력 완료',
+      count: labels.length
+    });
+
+  } catch (error) {
+    console.error('[API /print-labels] 에러:', error);
+    res.status(500).json({
+      error: `출력 실패: ${error.message}`
+    });
+  }
+});
+
+/**
  * GET /health - 프린터 상태 확인
  *
  * Response:
@@ -223,7 +284,8 @@ const server = app.listen(PORT, () => {
   console.log(`\n🖨️  프린터 브릿지 서버 시작`);
   console.log(`   포트: ${PORT}`);
   console.log(`   헬스체크: http://localhost:${PORT}/health`);
-  console.log(`   출력 API: http://localhost:${PORT}/print\n`);
+  console.log(`   출력 API: http://localhost:${PORT}/print`);
+  console.log(`   이름표 API: http://localhost:${PORT}/print-labels\n`);
 
   // 초기 프린터 연결 확인 (비차단)
   checkPrinterStatus()

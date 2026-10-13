@@ -100,3 +100,24 @@
 | `setTextNormal()` | 1x | 1x | 32자 | 본문 전체 |
 | `bold(true)` | 1x | 1x | 32자 | - |
 | `setTextQuadArea()` | 2x | 2x | 16자 | 상호명, 합계 |
+
+---
+
+## 픽업 이름표 (`POST /print-labels`)
+
+이름표 하나를 찍고 자르기를 반복합니다. 수량이 3이면 석 장이 나옵니다.
+
+```
+                                  ← setTextQuadArea + bold
+홍길동                            ← 4배 면적, 한글 8자까지
+                                  ← setTextDoubleHeight + bold
+샤인머스캣 2kg                    ← 세로 2배, 32자 폭, 두 줄까지
+                                  ← setTextNormal
+[1/3]           받을 상품 총 4개
+뒷번호 5678 / 과일러버
+
+
+
+- - - - - - - 절단 - - - - - - -
+```
+
