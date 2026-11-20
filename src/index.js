@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { initPrinter, checkPrinterStatus, printReceipt, closePrinter } from './printer.js';
 import { buildReceipt } from './receipt.js';
+import { parseTickets, renderTickets, TicketValidationError, PRINT_WIDTH_MM } from './ticket.js';
 
 /**
  * ESC/POS 프린터 브릿지 서버
@@ -153,6 +154,52 @@ app.post('/print', async (req, res) => {
 });
 
 /**
+ * POST /print/tickets - 공통 티켓 출력 (B2B 박스 라벨 · 매장 픽업 이름표 등)
+ *
+ * Request Body: { tickets: [{ lines: [Line, ...] }, ...] }
+ *   Line = { type: 'text', text, size?: 'normal'|'tall'|'wide'|'big', bold?, align?: 'left'|'center'|'right' }
+ *        | { type: 'row', left, right, size?, bold? }   ← 오른쪽 값을 줄 끝에 붙임
+ *        | { type: 'divider', style?: 'single'|'double' }
+ *        | { type: 'feed', count? }
+ *
+ * 티켓 한 장 = 내용 길이만큼 출력 + 커팅 한 번. 용지 폭은 72mm(48칸) 기준이다(src/ticket.js).
+ * 무엇을 찍을지는 화면이 정한다 — 라벨 내용이 바뀌어도 이 exe는 다시 깔 필요가 없다.
+ *
+ * Response:
+ * 200 - { message: "티켓 출력 완료", count }
+ * 400 - { error: "<어느 줄이 왜 틀렸는지>" }
+ * 500 - { error: "프린터 연결 실패" | "출력 실패: ..." }
+ */
+app.post('/print/tickets', async (req, res) => {
+  let tickets;
+  try {
+    tickets = parseTickets(req.body);
+  } catch (error) {
+    if (error instanceof TicketValidationError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('[API /print/tickets] 요청 해석 실패:', error);
+    return res.status(500).json({ error: `요청 해석 실패: ${error.message}` });
+  }
+
+  try {
+    const printer = initPrinter();
+    const isConnected = await checkPrinterStatus();
+    if (!isConnected) {
+      return res.status(500).json({ error: '프린터 연결 실패 - USB 케이블 및 전원을 확인하세요' });
+    }
+    // 앞선 출력이 실패해 버퍼에 남은 명령이 이번 티켓 앞에 섞여 나가지 않게 비우고 시작한다.
+    printer.clear();
+    renderTickets(printer, tickets);
+    await printReceipt(printer);
+    res.json({ message: '티켓 출력 완료', count: tickets.length });
+  } catch (error) {
+    console.error('[API /print/tickets] 에러:', error);
+    res.status(500).json({ error: `출력 실패: ${error.message}` });
+  }
+});
+
+/**
  * GET /health - 프린터 상태 확인
  *
  * Response:
@@ -223,7 +270,8 @@ const server = app.listen(PORT, () => {
   console.log(`\n🖨️  프린터 브릿지 서버 시작`);
   console.log(`   포트: ${PORT}`);
   console.log(`   헬스체크: http://localhost:${PORT}/health`);
-  console.log(`   출력 API: http://localhost:${PORT}/print\n`);
+  console.log(`   출력 API: http://localhost:${PORT}/print`);
+  console.log(`   공통 티켓 API: http://localhost:${PORT}/print/tickets (${PRINT_WIDTH_MM}mm 기준)\n`);
 
   // 초기 프린터 연결 확인 (비차단)
   checkPrinterStatus()
