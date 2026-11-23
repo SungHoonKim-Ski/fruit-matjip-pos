@@ -161,6 +161,7 @@ app.post('/print', async (req, res) => {
  *        | { type: 'row', left, right, size?, bold? }   ← 오른쪽 값을 줄 끝에 붙임
  *        | { type: 'divider', style?: 'single'|'double' }
  *        | { type: 'feed', count? }
+ *        | { type: 'image', png }   ← 화면이 PC 글꼴로 그린 PNG(base64, 폭 ≤ 576점)를 래스터로 찍음
  *
  * 티켓 한 장 = 내용 길이만큼 출력 + 커팅 한 번. 용지 폭은 72mm(48칸) 기준이다(src/ticket.js).
  * 무엇을 찍을지는 화면이 정한다 — 라벨 내용이 바뀌어도 이 exe는 다시 깔 필요가 없다.
@@ -190,7 +191,7 @@ app.post('/print/tickets', async (req, res) => {
     }
     // 앞선 출력이 실패해 버퍼에 남은 명령이 이번 티켓 앞에 섞여 나가지 않게 비우고 시작한다.
     printer.clear();
-    renderTickets(printer, tickets);
+    await renderTickets(printer, tickets);
     await printReceipt(printer);
     res.json({ message: '티켓 출력 완료', count: tickets.length });
   } catch (error) {
