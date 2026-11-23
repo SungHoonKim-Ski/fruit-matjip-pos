@@ -30,6 +30,12 @@ const MAX_TICKETS = 200;
 const MAX_LINES_PER_TICKET = 80;
 const MAX_TEXT_LENGTH = 500;
 const MAX_FEED = 10;
+/** 이름표 한 장 PNG는 수십 KB다. 200장 × 1MB도 요청 한도(10mb) 안에서 막히도록 장당 상한을 둔다. */
+const MAX_IMAGE_BASE64_LENGTH = 1_000_000;
+/** 576점 폭 기준 2,000줄 ≈ 25cm. 라벨이 이보다 길면 화면 쪽 계산이 틀린 것이다. */
+const MAX_IMAGE_HEIGHT_DOTS = 2000;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 const SIZES = {
   normal: { columns: PAPER_COLUMNS, apply: (p) => p.setTextNormal() },
@@ -114,6 +120,24 @@ function pickOption(value, options, fallback, field, where) {
   return value;
 }
 
+/**
+ * 그림 줄 — 화면이 PC 글꼴로 그린 PNG를 그대로 래스터로 찍는다. 프린터 내장 한글 글꼴(얇은 비트맵, 정수배 확대뿐)을 거치지 않고,
+ * EUC-KR에 없는 글자도 그대로 나온다. 폭은 인쇄 폭(576점)을 넘을 수 없다 — 넘으면 프린터가 오른쪽을 잘라 버린다.
+ */
+function parseImage(line, where) {
+  const { png } = line;
+  if (typeof png !== 'string' || png.length === 0) fail(`${where}: png는 base64 문자열이어야 합니다`);
+  if (png.length > MAX_IMAGE_BASE64_LENGTH) fail(`${where}: png가 ${MAX_IMAGE_BASE64_LENGTH}자를 넘습니다`);
+  if (!BASE64.test(png)) fail(`${where}: png가 base64 형식이 아닙니다`);
+  const buffer = Buffer.from(png, 'base64');
+  if (buffer.length < 24 || !buffer.subarray(0, 8).equals(PNG_SIGNATURE)) fail(`${where}: png가 PNG 파일이 아닙니다`);
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  if (width < 1 || width > PRINT_WIDTH_DOTS) fail(`${where}: 그림 폭 ${width}점은 1~${PRINT_WIDTH_DOTS}점이어야 합니다`);
+  if (height < 1 || height > MAX_IMAGE_HEIGHT_DOTS) fail(`${where}: 그림 높이 ${height}점은 1~${MAX_IMAGE_HEIGHT_DOTS}점이어야 합니다`);
+  return { type: 'image', buffer, width, height };
+}
+
 function parseLine(line, where) {
   if (!line || typeof line !== 'object') fail(`${where}: 줄은 객체여야 합니다`);
   const size = () => pickOption(line.size, SIZES, 'normal', 'size', where);
@@ -130,8 +154,10 @@ function parseLine(line, where) {
       if (!Number.isInteger(count) || count < 1 || count > MAX_FEED) fail(`${where}: feed count는 1~${MAX_FEED} 정수여야 합니다`);
       return { type: 'feed', count };
     }
+    case 'image':
+      return parseImage(line, where);
     default:
-      return fail(`${where}: type '${line.type}'는 지원하지 않습니다 (text·row·divider·feed)`);
+      return fail(`${where}: type '${line.type}'는 지원하지 않습니다 (text·row·divider·feed·image)`);
   }
 }
 
@@ -162,7 +188,12 @@ function rowLines(left, right, columns) {
   return [`${first}${' '.repeat(gap)}${right}`, ...rest];
 }
 
-function renderLine(printer, line) {
+async function renderLine(printer, line) {
+  if (line.type === 'image') {
+    // GS v 0 래스터. 흰 바탕에 검은 글자로 그린 그림이라 밝기 128을 기준으로 점을 찍는다(라이브러리 기준).
+    await printer.printImageBuffer(line.buffer);
+    return;
+  }
   if (line.type === 'feed') {
     for (let i = 0; i < line.count; i += 1) printer.newLine();
     return;
@@ -186,16 +217,16 @@ function renderLine(printer, line) {
 }
 
 /**
- * 검증된 티켓을 프린터 버퍼에 쌓는다. 실제 전송은 호출하는 쪽(printReceipt)이 한다.
+ * 검증된 티켓을 프린터 버퍼에 쌓는다(그림 줄 때문에 비동기). 실제 전송은 호출하는 쪽(printReceipt)이 한다.
  * @param {import('node-thermal-printer').ThermalPrinter} printer
  * @param {{ lines: object[] }[]} tickets
  */
-export function renderTickets(printer, tickets) {
+export async function renderTickets(printer, tickets) {
   for (const ticket of tickets) {
     printer.append(PRINT_AREA_COMMAND);
     printer.setTextNormal();
     printer.alignLeft();
-    ticket.lines.forEach((line) => renderLine(printer, line));
+    for (const line of ticket.lines) await renderLine(printer, line);
     for (let i = 0; i < FEED_BEFORE_CUT; i += 1) printer.newLine();
     printer.cut();
   }
